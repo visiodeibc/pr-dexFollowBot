@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "src/app/api/tg/route.ts": {
+      "maxDuration": 10
+    }
+  }
+}

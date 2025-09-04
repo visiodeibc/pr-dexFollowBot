@@ -1,6 +1,8 @@
-# 🤖 Telegram Bot Vercel
+# 🤖 Crypto Wallet Follow Bot
 
 A production-ready Telegram bot built with **Next.js 14**, **grammY**, and **Supabase**, designed to run seamlessly on **Vercel** with webhook support and optional background worker processing.
+
+This project is evolving into a crypto wallet follow bot. Initial scope focuses on Solana. Users will be able to follow wallets and receive summarized transaction updates in Telegram. We’re rolling out in stages to validate demand and iterate quickly.
 
 ## ✨ Features
 
@@ -10,6 +12,7 @@ A production-ready Telegram bot built with **Next.js 14**, **grammY**, and **Sup
 - 🏗️ **TypeScript**: Fully typed with strict mode enabled
 - 🔒 **Secure**: Webhook secret validation and environment variable validation
 - 🎯 **Modern stack**: Next.js 14 App Router, grammY, Zod validation
+- 📝 **Waitlist capture (Stage 1)**: Users can join a free early-access waitlist via `/waitlist` or the Start button
 
 ## 🚀 Quick Start
 
@@ -76,6 +79,23 @@ CREATE TABLE jobs (
 CREATE INDEX idx_jobs_status_created ON jobs (status, created_at);
 ```
 
+#### Waitlist Table (Stage 1)
+```sql
+CREATE TABLE IF NOT EXISTS waitlist (
+  user_id BIGINT PRIMARY KEY,
+  username TEXT,
+  first_name TEXT,
+  last_name TEXT,
+  email TEXT,
+  pref_solana_wallet TEXT,
+  joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  source TEXT
+);
+
+-- Optional: who invited or where they came from
+-- ALTER TABLE waitlist ADD COLUMN ref TEXT;
+```
+
 ### 4. Development Modes
 
 #### Local Polling Mode (Recommended for development)
@@ -128,6 +148,7 @@ src/
 ├── lib/
 │   ├── env.ts              # Environment validation with Zod
 │   └── supabase.ts         # Supabase client setup
+│   └── waitlist.ts         # Waitlist helpers (Stage 1)
 ├── worker/index.ts         # Background job processor
 └── dev.ts                  # Local polling mode script
 scripts/
@@ -136,10 +157,13 @@ scripts/
 
 ## 🤖 Bot Commands
 
-- `/start` - Welcome message with interactive button
+- `/start` - Welcome message with interactive buttons
 - `/help` - List available commands
 - `/echo <text>` - Echo your message back
 - `/job <message>` - Create a background job (demo)
+- `/waitlist` - Join the free early-access waitlist (Stage 1)
+- `/email <you@example.com>` - Save an optional email for updates (Stage 1)
+- `/wallet <solana_address>` - Save your preferred Solana wallet (Stage 1)
 
 ## 🔧 Scripts
 
@@ -180,6 +204,23 @@ scripts/
 3. Bot receives updates via webhooks
 4. Scale background worker as needed
 
+## 🗺️ Rollout Stages
+
+Stage 1 — Gathering Users (now)
+- Add waitlist command and inline button to collect interest
+- Store Telegram user metadata into `waitlist`
+- Keep messaging clear about Solana-only initial support
+
+Stage 2 — Beta (usage tracking)
+- Let users add Solana wallet addresses to follow
+- Track usage events to tune UX and infra
+- Summarize wallet transactions and post to Telegram (webhooks preferred; fallback to cron)
+
+Stage 3 — Paywall
+- Decide pricing based on Stage 2 data
+- Add in-bot paywall and quotas
+- Monetize while maintaining free tier for light usage
+
 ## 🔧 Customization
 
 ### Adding New Commands
@@ -198,6 +239,12 @@ bot.command('newcommand', async (ctx) => {
 
 ### Database Extensions
 Extend the Supabase schema as needed for your use case.
+
+## 🧪 Stage 1 Validation Tips
+- Share the bot in relevant channels and communities
+- Use `/waitlist` and the Start button to collect interest quickly
+- Review `waitlist` table to gauge demand and note feedback
+- Encourage users to add `/email` and `/wallet` to enrich early-access outreach
 
 ## 🐛 Troubleshooting
 

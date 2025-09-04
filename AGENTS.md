@@ -40,3 +40,30 @@
 - Validate env via `src/lib/env.ts`. Keep webhook handlers fast; offload heavy work to `src/worker/`.
 - For local webhooks, use a tunnel (e.g., ngrok) then run: `PUBLIC_URL=https://... pnpm bot:set-webhook`.
 
+
+## Product Rollout Checklist
+
+Stage 1 — Gathering Users (Waitlist)
+- [x] Add `/waitlist` command to store Telegram user into Supabase `waitlist`
+- [x] Add Start inline button: “Join waitlist”
+- [x] Create `src/lib/waitlist.ts` helper (insert, exists)
+- [x] README/AGENTS updated with stage plan and schema
+- [x] Add `/email` and `/wallet` commands with validation
+- [x] Add Start buttons for “Add email” and “Add wallet” (guides to commands)
+- [ ] Share bot link in target communities/channels
+
+Stage 2 — Beta (Solana-only)
+- [ ] Command to add followed wallet(s) (Solana address validation)
+- [ ] Background tracking: webhook/cron to detect wallet transactions
+- [ ] Summarization of transactions and token info; post updates in Telegram
+- [ ] Usage logging (events) to inform pricing and UX
+
+Stage 3 — Paywall
+- [ ] Pricing policy based on Stage 2 usage data
+- [ ] In-bot paywall, quotas, and upgrade flows
+- [ ] Billing integration (Telegram payments or external)
+- [ ] Graceful limits and messaging for free tier
+
+Notes
+- Start with Solana; design abstractions for multi-chain later.
+- Keep webhook handlers fast; defer heavy work to `src/worker/`.

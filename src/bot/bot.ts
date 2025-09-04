@@ -1,6 +1,7 @@
 import { Bot, GrammyError, HttpError, InlineKeyboard } from 'grammy';
 import { env } from '@/lib/env';
 import { createJob } from '@/lib/supabase';
+import { joinWaitlist, isInWaitlist, setWaitlistEmail, setWaitlistWallet } from '@/lib/waitlist';
 
 // Lazy bot instance creation
 let _bot: Bot | null = null;
@@ -59,14 +60,20 @@ function setupBotHandlers(bot: Bot) {
 
 // Start command with inline keyboard
 bot.command('start', async (ctx) => {
-  const keyboard = new InlineKeyboard().text('🏓 Ping me!', 'ping');
-  
+  const keyboard = new InlineKeyboard()
+    .text('📝 Join waitlist', 'join_waitlist')
+    .row()
+    .text('✉️ Add email', 'add_email')
+    .text('💼 Add wallet', 'add_wallet')
+    .row()
+    .text('🏓 Ping me!', 'ping');
+
   await ctx.reply(
-    `🤖 Hello! I'm your Telegram bot built with Next.js, grammY, and Supabase!
+    `🤖 Crypto Wallet Follow Bot (Solana-first)
 
-🚀 I'm running on Vercel and ready to help you.
+Track wallets and get summarized transaction updates in Telegram.
 
-Use /help to see available commands.`,
+We are gathering early users now. Tap below or use /waitlist to join free early access.`,
     { reply_markup: keyboard }
   );
 });
@@ -78,6 +85,9 @@ bot.command('help', async (ctx) => {
 
 /start - Get started with the bot
 /help - Show this help message
+/waitlist - Join the free early-access waitlist
+/email <you@example.com> - Save an optional email for updates
+/wallet <solana_address> - Save your preferred Solana wallet
 /echo <text> - Echo your message back
 /job <message> - Create a background job (demo)
 
@@ -118,6 +128,100 @@ bot.command('job', async (ctx) => {
   }
 });
 
+// Waitlist command
+bot.command('waitlist', async (ctx) => {
+  const from = ctx.from;
+  if (!from) {
+    await ctx.reply('Could not read your user info. Please try again.');
+    return;
+  }
+  const res = await joinWaitlist(
+    {
+      id: from.id,
+      username: from.username,
+      first_name: (from as any).first_name,
+      last_name: (from as any).last_name,
+    },
+    'command'
+  );
+
+  if (!res.ok) {
+    await ctx.reply('❌ Failed to join the waitlist. Please try again later.');
+    return;
+  }
+
+  if (res.already) {
+    await ctx.reply('✅ You are already on the waitlist. We will keep you posted!');
+  } else {
+    await ctx.reply('🎉 You are on the waitlist! We will reach out when beta opens.');
+  }
+});
+
+// Helpers: validators
+function isValidEmail(email: string): boolean {
+  // Simple RFC5322-ish sanity check
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim());
+}
+
+function isValidSolanaAddress(addr: string): boolean {
+  // Base58 without 0,O,I,l; typical length ~32-44
+  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(addr.trim());
+}
+
+// Email command
+bot.command('email', async (ctx) => {
+  const from = ctx.from;
+  if (!from) return;
+
+  const email = ctx.match?.trim();
+  if (!email) {
+    await ctx.reply('Usage: /email you@example.com');
+    return;
+  }
+  if (!isValidEmail(email)) {
+    await ctx.reply('That email does not look valid. Please try again.');
+    return;
+  }
+  const joined = await isInWaitlist(from.id);
+  if (!joined) {
+    await ctx.reply('Please join the waitlist first with /waitlist.');
+    return;
+  }
+  const ok = await setWaitlistEmail(from.id, email);
+  if (!ok) {
+    await ctx.reply('❌ Could not save your email. Try again later.');
+    return;
+  }
+  await ctx.reply('✉️ Email saved. Thank you!');
+});
+
+// Wallet command (Solana)
+bot.command('wallet', async (ctx) => {
+  const from = ctx.from;
+  if (!from) return;
+
+  const wallet = ctx.match?.trim();
+  if (!wallet) {
+    await ctx.reply('Usage: /wallet <your_solana_address>');
+    return;
+  }
+  if (!isValidSolanaAddress(wallet)) {
+    await ctx.reply('That does not look like a valid Solana address.');
+    return;
+  }
+  const joined = await isInWaitlist(from.id);
+  if (!joined) {
+    await ctx.reply('Please join the waitlist first with /waitlist.');
+    return;
+  }
+  const ok = await setWaitlistWallet(from.id, wallet);
+  if (!ok) {
+    await ctx.reply('❌ Could not save your wallet. Try again later.');
+    return;
+  }
+  await ctx.reply('💼 Wallet saved. Thanks!');
+});
+
 // Handle callback queries (inline keyboard buttons)
 bot.on('callback_query:data', async (ctx) => {
   const data = ctx.callbackQuery.data;
@@ -125,6 +229,39 @@ bot.on('callback_query:data', async (ctx) => {
   if (data === 'ping') {
     await ctx.answerCallbackQuery('Pong! 🏓');
     await ctx.reply('🏓 Pong! The bot is working perfectly!');
+  } else if (data === 'add_email') {
+    await ctx.answerCallbackQuery();
+    await ctx.reply('Send your email with the command: /email you@example.com');
+  } else if (data === 'add_wallet') {
+    await ctx.answerCallbackQuery();
+    await ctx.reply('Send your Solana wallet with: /wallet <address>');
+  } else if (data === 'join_waitlist') {
+    const from = ctx.from;
+    if (!from) {
+      await ctx.answerCallbackQuery('Could not read your user.');
+      return;
+    }
+    const res = await joinWaitlist(
+      {
+        id: from.id,
+        username: from.username,
+        first_name: (from as any).first_name,
+        last_name: (from as any).last_name,
+      },
+      'start_button'
+    );
+    if (!res.ok) {
+      await ctx.answerCallbackQuery('Failed. Try again later.');
+      await ctx.reply('❌ Failed to join the waitlist. Please try again later.');
+      return;
+    }
+    if (res.already) {
+      await ctx.answerCallbackQuery('Already joined ✅');
+      await ctx.reply('✅ You are already on the waitlist. We will keep you posted!');
+    } else {
+      await ctx.answerCallbackQuery('Joined! 🎉');
+      await ctx.reply('🎉 You are on the waitlist! We will reach out when beta opens.');
+    }
   } else {
     await ctx.answerCallbackQuery('Unknown action');
   }

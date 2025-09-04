@@ -28,8 +28,13 @@ export async function POST(request: NextRequest) {
       }
     }
     
+    // Ensure bot is initialized on cold starts
+    const b = bot();
+    if (!b.botInfo) {
+      await b.init();
+    }
     // Handle the update with grammY
-    await bot().handleUpdate(update);
+    await b.handleUpdate(update);
     
     const res = NextResponse.json({ ok: true });
     if (isLocal) console.log('Webhook responded:', 200, '{ ok: true }');

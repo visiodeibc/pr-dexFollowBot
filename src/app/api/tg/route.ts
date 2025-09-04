@@ -30,8 +30,11 @@ export async function POST(request: NextRequest) {
     
     // Ensure bot is initialized on cold starts
     const b = bot();
-    if (!b.botInfo) {
+    // Always attempt init; safe if already initialized
+    try {
       await b.init();
+    } catch {
+      // ignore if already initialized or network hiccup; handleUpdate may still work
     }
     // Handle the update with grammY
     await b.handleUpdate(update);

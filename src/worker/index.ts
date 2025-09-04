@@ -1,5 +1,8 @@
 #!/usr/bin/env tsx
 
+import dotenv from 'dotenv';
+dotenv.config({ path: '.env.local' });
+dotenv.config();
 import { bot } from '../bot/bot';
 import { getSupabaseAdmin, updateJobStatus, type JobRecord } from '../lib/supabase';
 

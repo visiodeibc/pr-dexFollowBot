@@ -14,6 +14,48 @@ function getBot(): Bot {
 }
 
 function setupBotHandlers(bot: Bot) {
+  // Development-only verbose logging of updates and API calls
+  const isLocal = process.env.NODE_ENV !== 'production';
+  if (isLocal) {
+    bot.use(async (ctx, next) => {
+      try {
+        console.log('⬇️ Incoming update:', JSON.stringify(ctx.update, null, 2));
+      } catch {
+        console.log('⬇️ Incoming update received (non-serializable)');
+      }
+
+      const start = Date.now();
+      try {
+        await next();
+      } finally {
+        const ms = Date.now() - start;
+        console.log(`✔️ Handled update in ${ms}ms`);
+      }
+    });
+
+    // Log outgoing Telegram API calls and their results
+    bot.api.config.use(async (prev, method, payload, signal) => {
+      try {
+        console.log('→ API call:', method, safeJson(payload));
+      } catch {
+        console.log('→ API call:', method, '[unlogged payload]');
+      }
+      try {
+        const res = await prev(method, payload, signal);
+        try {
+          // Avoid huge/circular logs; print shallow info only
+          const summary = summarizeResult(res);
+          console.log('← API result:', method, summary);
+        } catch {
+          console.log('← API result:', method, '[unlogged result]');
+        }
+        return res;
+      } catch (err) {
+        console.error('✖ API error:', method, err);
+        throw err;
+      }
+    });
+  }
 
 // Start command with inline keyboard
 bot.command('start', async (ctx) => {
@@ -119,3 +161,21 @@ bot.on('message:text', async (ctx) => {
 // Export lazy bot getter
 export const bot = getBot;
 export default getBot;
+
+// Helpers
+function safeJson(value: unknown) {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return '[unserializable]';
+  }
+}
+
+function summarizeResult(res: unknown) {
+  if (!res || typeof res !== 'object') return String(res);
+  const obj = res as Record<string, unknown>;
+  const keys = Object.keys(obj).slice(0, 10);
+  const summary: Record<string, unknown> = {};
+  for (const k of keys) summary[k] = obj[k];
+  return { keys: Object.keys(obj).length, preview: summary };
+}

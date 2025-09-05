@@ -45,56 +45,25 @@ Required environment variables:
 - `SUPABASE_ANON_KEY`: Your Supabase anon key
 - `SUPABASE_SERVICE_ROLE`: Your Supabase service role key (optional, for admin operations)
 
-### 3. Supabase Database Setup
+### 3. Database Setup (Prisma)
 
-Create the following tables in your Supabase database:
+This project uses Prisma to manage the Supabase (Postgres) schema. No manual SQL is required.
 
-#### Users Table (Optional)
-```sql
-CREATE TABLE users (
-  id BIGINT PRIMARY KEY,
-  username TEXT,
-  first_name TEXT,
-  last_name TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+1) Add database env vars to `.env.local` (see `prisma/.env.example` for reference):
+
+```env
+DATABASE_URL="postgresql://..."   # Supabase Pooler URL (pgBouncer)
+DIRECT_URL="postgresql://..."     # Supabase Direct URL (5432)
 ```
 
-#### Jobs Table (Required for background worker)
-```sql
-CREATE TABLE jobs (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  type TEXT NOT NULL,
-  chat_id BIGINT NOT NULL,
-  payload JSONB NOT NULL DEFAULT '{}',
-  status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'processing', 'completed', 'failed')),
-  result JSONB,
-  error TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+2) Generate the Prisma client and apply migrations:
 
--- Index for efficient job polling
-CREATE INDEX idx_jobs_status_created ON jobs (status, created_at);
+```bash
+pnpm prisma:generate
+pnpm prisma:deploy   # applies the checked-in migrations
 ```
 
-#### Waitlist Table (Stage 1)
-```sql
-CREATE TABLE IF NOT EXISTS waitlist (
-  user_id BIGINT PRIMARY KEY,
-  username TEXT,
-  first_name TEXT,
-  last_name TEXT,
-  email TEXT,
-  pref_solana_wallet TEXT,
-  joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  source TEXT
-);
-
--- Optional: who invited or where they came from
--- ALTER TABLE waitlist ADD COLUMN ref TEXT;
-```
+That’s it. The checked-in Prisma schema defines the `waitlist` and `jobs` tables used by the bot and worker.
 
 ### 4. Development Modes
 
@@ -139,6 +108,48 @@ pnpm worker:dev
 
 In production, you can run the worker as a separate service or scheduled function.
 
+### 7. Prisma (Schema Management)
+
+We use Prisma to manage the Postgres (Supabase) schema. Set `DATABASE_URL` in `.env.local` to your Supabase connection string.
+
+Commands:
+
+```bash
+# Generate client
+pnpm prisma:generate
+
+# Create and apply a migration based on prisma/schema.prisma
+pnpm prisma:migrate --name init
+
+# Deploy pending migrations (CI/production)
+pnpm prisma:deploy
+```
+
+Notes:
+- The Prisma schema defines `waitlist` and `jobs` to match this project.
+- This repo includes an initial migration; use `pnpm prisma:deploy` to apply it in CI/prod.
+- Ensure `DATABASE_URL` uses the pooled (non-readonly) connection string and set `DIRECT_URL` for migrations.
+
+#### Prisma datasource configuration
+
+The schema is configured to use a pooled URL for runtime and a direct URL for migrations:
+
+- `DATABASE_URL`: Supabase Pooler (pgBouncer) URL, e.g. `...@<POOLER_HOST>:6543/postgres?pgbouncer=true&sslmode=require`
+- `DIRECT_URL`: Supabase Direct URL, e.g. `...@db.<PROJECT_REF>.supabase.co:5432/postgres?sslmode=require`
+
+`prisma migrate deploy` uses `DIRECT_URL` under the hood. Ensure outbound access to port 5432 is allowed on your network.
+
+#### Troubleshooting P1001 (can’t reach database server)
+
+- Verify `DIRECT_URL` is correct and includes `sslmode=require`.
+- Check your network/VPN/firewall allows outbound `5432` to `db.<PROJECT_REF>.supabase.co`.
+- Test connectivity: `nc -vz db.<PROJECT_REF>.supabase.co 5432` (or `openssl s_client -connect db.<PROJECT_REF>.supabase.co:5432`)
+- If 5432 is blocked, you can temporarily run migrations through the Pooler:
+  - Set `DATABASE_URL` to your Pooler URL in `prisma/.env`.
+  - Run: `pnpm prisma:deploy:pooler` (this overrides `DIRECT_URL` with the Pooler for the deploy run).
+  - After success, revert to the direct URL for future migrations.
+
+
 ## 🏗️ Project Structure
 
 ```
@@ -153,17 +164,15 @@ src/
 └── dev.ts                  # Local polling mode script
 scripts/
 └── setWebhook.ts           # Webhook registration utility
+prisma/
+└── schema.prisma           # Prisma schema for Postgres (Supabase)
 ```
 
 ## 🤖 Bot Commands
 
 - `/start` - Welcome message with interactive buttons
 - `/help` - List available commands
-- `/echo <text>` - Echo your message back
-- `/job <message>` - Create a background job (demo)
-- `/waitlist` - Join the free early-access waitlist (Stage 1)
-- `/email <you@example.com>` - Save an optional email for updates (Stage 1)
-- `/wallet <solana_address>` - Save your preferred Solana wallet (Stage 1)
+- `/waitlist` - Join the free early-access waitlist (asks for email and wallet inline)
 
 ## 🔧 Scripts
 
@@ -243,8 +252,8 @@ Extend the Supabase schema as needed for your use case.
 ## 🧪 Stage 1 Validation Tips
 - Share the bot in relevant channels and communities
 - Use `/waitlist` and the Start button to collect interest quickly
+- After joining, the bot will ask for email and wallet inline (optional)
 - Review `waitlist` table to gauge demand and note feedback
-- Encourage users to add `/email` and `/wallet` to enrich early-access outreach
 
 ## 🐛 Troubleshooting
 

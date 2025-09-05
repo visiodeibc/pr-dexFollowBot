@@ -17,6 +17,9 @@
 - `pnpm bot:dev`: Run bot in polling mode for local development.
 - `pnpm bot:set-webhook`: Register Telegram webhook (uses `PUBLIC_URL`).
 - `pnpm worker:dev`: Start background worker loop.
+- `pnpm prisma:generate`: Generate Prisma client.
+- `pnpm prisma:migrate`: Create/apply a migration from schema.
+- `pnpm prisma:deploy`: Apply pending migrations (CI/prod).
 
 ## Coding Style & Naming Conventions
 - Language: TypeScript (`strict: true`). Prefer `@/*` imports via `tsconfig` paths.
@@ -40,16 +43,21 @@
 - Validate env via `src/lib/env.ts`. Keep webhook handlers fast; offload heavy work to `src/worker/`.
 - For local webhooks, use a tunnel (e.g., ngrok) then run: `PUBLIC_URL=https://... pnpm bot:set-webhook`.
 
+## Prisma Setup
+- Add `DATABASE_URL` in `.env.local` using Supabase connection string (non-readonly).
+- Schema at `prisma/schema.prisma` defines `waitlist` and `jobs`.
+- Commands: `pnpm prisma:generate`, `pnpm prisma:migrate --name <msg>`, `pnpm prisma:deploy`.
+ - Prefer migrations via Prisma; avoid manual SQL DDL in docs.
+
 
 ## Product Rollout Checklist
 
 Stage 1 — Gathering Users (Waitlist)
 - [x] Add `/waitlist` command to store Telegram user into Supabase `waitlist`
 - [x] Add Start inline button: “Join waitlist”
-- [x] Create `src/lib/waitlist.ts` helper (insert, exists)
+- [x] Create `src/lib/waitlist.ts` helper (insert, exists, setters)
+- [x] Conversational capture of email and wallet after `/waitlist` (with Skip)
 - [x] README/AGENTS updated with stage plan and schema
-- [x] Add `/email` and `/wallet` commands with validation
-- [x] Add Start buttons for “Add email” and “Add wallet” (guides to commands)
 - [ ] Share bot link in target communities/channels
 
 Stage 2 — Beta (Solana-only)

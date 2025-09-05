@@ -8,6 +8,7 @@ const validators = {
   SUPABASE_URL: z.string().url('SUPABASE_URL must be a valid URL'),
   SUPABASE_ANON_KEY: z.string().min(1, 'SUPABASE_ANON_KEY is required'),
   SUPABASE_SERVICE_ROLE: z.string().optional(),
+  DATABASE_URL: z.string().url().optional(),
 } as const;
 
 type Env = {
@@ -17,6 +18,7 @@ type Env = {
   SUPABASE_URL: string;
   SUPABASE_ANON_KEY: string;
   SUPABASE_SERVICE_ROLE?: string;
+  DATABASE_URL?: string;
 };
 
 const cache = new Map<keyof Env, string | undefined>();

@@ -1,6 +1,5 @@
 import { Bot, GrammyError, HttpError, InlineKeyboard } from 'grammy';
 import { env } from '@/lib/env';
-import { createJob } from '@/lib/supabase';
 import { joinWaitlist, isInWaitlist, setWaitlistEmail, setWaitlistWallet } from '@/lib/waitlist';
 
 // Lazy bot instance creation
@@ -58,6 +57,9 @@ function setupBotHandlers(bot: Bot) {
     });
   }
 
+// Simple in-memory flow state (best-effort; Stage 1)
+const waitlistFlow = new Map<number, 'awaiting_email' | 'awaiting_wallet'>();
+
 // Start command with inline keyboard
 bot.command('start', async (ctx) => {
   const keyboard = new InlineKeyboard()
@@ -69,11 +71,11 @@ bot.command('start', async (ctx) => {
     .text('🏓 Ping me!', 'ping');
 
   await ctx.reply(
-    `🤖 Crypto Wallet Follow Bot (Solana-first)
+    `🤖 Crypto Wallet Follow Bot (Solana‑first)
 
-Track wallets and get summarized transaction updates in Telegram.
+✨ Follow any Solana wallet and receive instant, human‑readable trade & transfer summaries right in Telegram.
 
-We are gathering early users now. Tap below or use /waitlist to join free early access.`,
+Be among the first to try it (free beta). Tap “📝 Join waitlist” below or send /waitlist.`,
     { reply_markup: keyboard }
   );
 });
@@ -85,47 +87,8 @@ bot.command('help', async (ctx) => {
 
 /start - Get started with the bot
 /help - Show this help message
-/waitlist - Join the free early-access waitlist
-/email <you@example.com> - Save an optional email for updates
-/wallet <solana_address> - Save your preferred Solana wallet
-/echo <text> - Echo your message back
-/job <message> - Create a background job (demo)
-
-You can also send me any text and I'll echo it back!`
+/waitlist - Join the free early-access waitlist (will ask for email & wallet)`
   );
-});
-
-// Echo command
-bot.command('echo', async (ctx) => {
-  const text = ctx.match;
-  if (!text) {
-    await ctx.reply('Please provide some text to echo. Example: /echo Hello World');
-    return;
-  }
-  
-  await ctx.reply(`Echo: ${text}`);
-});
-
-// Job command - demonstrates background worker integration
-bot.command('job', async (ctx) => {
-  const message = ctx.match;
-  if (!message) {
-    await ctx.reply('Please provide a message for the job. Example: /job Process this data');
-    return;
-  }
-
-  try {
-    const job = await createJob('echo_job', ctx.chat.id, { message });
-    
-    if (job) {
-      await ctx.reply(`✅ Background job created with ID: ${job.id}`);
-    } else {
-      await ctx.reply('❌ Failed to create background job');
-    }
-  } catch (error) {
-    console.error('Error creating job:', error);
-    await ctx.reply('❌ Error creating background job');
-  }
 });
 
 // Waitlist command
@@ -149,12 +112,14 @@ bot.command('waitlist', async (ctx) => {
     await ctx.reply('❌ Failed to join the waitlist. Please try again later.');
     return;
   }
-
-  if (res.already) {
-    await ctx.reply('✅ You are already on the waitlist. We will keep you posted!');
-  } else {
-    await ctx.reply('🎉 You are on the waitlist! We will reach out when beta opens.');
-  }
+  waitlistFlow.set(from.id, 'awaiting_email');
+  const keyboard = new InlineKeyboard().text('Skip ✉️', 'skip_email');
+  await ctx.reply(
+    res.already
+      ? 'You are on the waitlist. Please reply with your email (optional), or tap Skip.'
+      : '🎉 You are on the waitlist! Please reply with your email (optional), or tap Skip.',
+    { reply_markup: keyboard }
+  );
 });
 
 // Helpers: validators
@@ -168,60 +133,6 @@ function isValidSolanaAddress(addr: string): boolean {
   return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(addr.trim());
 }
 
-// Email command
-bot.command('email', async (ctx) => {
-  const from = ctx.from;
-  if (!from) return;
-
-  const email = ctx.match?.trim();
-  if (!email) {
-    await ctx.reply('Usage: /email you@example.com');
-    return;
-  }
-  if (!isValidEmail(email)) {
-    await ctx.reply('That email does not look valid. Please try again.');
-    return;
-  }
-  const joined = await isInWaitlist(from.id);
-  if (!joined) {
-    await ctx.reply('Please join the waitlist first with /waitlist.');
-    return;
-  }
-  const ok = await setWaitlistEmail(from.id, email);
-  if (!ok) {
-    await ctx.reply('❌ Could not save your email. Try again later.');
-    return;
-  }
-  await ctx.reply('✉️ Email saved. Thank you!');
-});
-
-// Wallet command (Solana)
-bot.command('wallet', async (ctx) => {
-  const from = ctx.from;
-  if (!from) return;
-
-  const wallet = ctx.match?.trim();
-  if (!wallet) {
-    await ctx.reply('Usage: /wallet <your_solana_address>');
-    return;
-  }
-  if (!isValidSolanaAddress(wallet)) {
-    await ctx.reply('That does not look like a valid Solana address.');
-    return;
-  }
-  const joined = await isInWaitlist(from.id);
-  if (!joined) {
-    await ctx.reply('Please join the waitlist first with /waitlist.');
-    return;
-  }
-  const ok = await setWaitlistWallet(from.id, wallet);
-  if (!ok) {
-    await ctx.reply('❌ Could not save your wallet. Try again later.');
-    return;
-  }
-  await ctx.reply('💼 Wallet saved. Thanks!');
-});
-
 // Handle callback queries (inline keyboard buttons)
 bot.on('callback_query:data', async (ctx) => {
   const data = ctx.callbackQuery.data;
@@ -231,10 +142,69 @@ bot.on('callback_query:data', async (ctx) => {
     await ctx.reply('🏓 Pong! The bot is working perfectly!');
   } else if (data === 'add_email') {
     await ctx.answerCallbackQuery();
-    await ctx.reply('Send your email with the command: /email you@example.com');
+    const from = ctx.from;
+    if (!from) return;
+    const joined = await isInWaitlist(from.id);
+    if (!joined) {
+      const res = await joinWaitlist(
+        {
+          id: from.id,
+          username: from.username,
+          first_name: (from as any).first_name,
+          last_name: (from as any).last_name,
+        },
+        'start_add_email'
+      );
+      if (!res.ok) {
+        await ctx.reply('❌ Failed to join the waitlist. Please try again later.');
+        return;
+      }
+    }
+    waitlistFlow.set(from!.id, 'awaiting_email');
+    const keyboard = new InlineKeyboard().text('Skip ✉️', 'skip_email');
+    await ctx.reply('Please reply with your email (optional), or tap Skip.', {
+      reply_markup: keyboard,
+    });
   } else if (data === 'add_wallet') {
     await ctx.answerCallbackQuery();
-    await ctx.reply('Send your Solana wallet with: /wallet <address>');
+    const from = ctx.from;
+    if (!from) return;
+    const joined = await isInWaitlist(from.id);
+    if (!joined) {
+      const res = await joinWaitlist(
+        {
+          id: from.id,
+          username: from.username,
+          first_name: (from as any).first_name,
+          last_name: (from as any).last_name,
+        },
+        'start_add_wallet'
+      );
+      if (!res.ok) {
+        await ctx.reply('❌ Failed to join the waitlist. Please try again later.');
+        return;
+      }
+    }
+    waitlistFlow.set(from!.id, 'awaiting_wallet');
+    const keyboard = new InlineKeyboard().text('Skip 💼', 'skip_wallet');
+    await ctx.reply('Please reply with your Solana wallet (optional), or tap Skip.', {
+      reply_markup: keyboard,
+    });
+  } else if (data === 'skip_email') {
+    await ctx.answerCallbackQuery('Skipped email');
+    const from = ctx.from;
+    if (!from) return;
+    waitlistFlow.set(from.id, 'awaiting_wallet');
+    const keyboard = new InlineKeyboard().text('Skip 💼', 'skip_wallet');
+    await ctx.reply('No worries. Now, reply with your Solana wallet (optional), or tap Skip.', {
+      reply_markup: keyboard,
+    });
+  } else if (data === 'skip_wallet') {
+    await ctx.answerCallbackQuery('All set!');
+    const from = ctx.from;
+    if (!from) return;
+    waitlistFlow.delete(from.id);
+    await ctx.reply('All set! Thanks for joining. We will be in touch.');
   } else if (data === 'join_waitlist') {
     const from = ctx.from;
     if (!from) {
@@ -255,13 +225,15 @@ bot.on('callback_query:data', async (ctx) => {
       await ctx.reply('❌ Failed to join the waitlist. Please try again later.');
       return;
     }
-    if (res.already) {
-      await ctx.answerCallbackQuery('Already joined ✅');
-      await ctx.reply('✅ You are already on the waitlist. We will keep you posted!');
-    } else {
-      await ctx.answerCallbackQuery('Joined! 🎉');
-      await ctx.reply('🎉 You are on the waitlist! We will reach out when beta opens.');
-    }
+    await ctx.answerCallbackQuery(res.already ? 'Already joined ✅' : 'Joined! 🎉');
+    waitlistFlow.set(from.id, 'awaiting_email');
+    const keyboard = new InlineKeyboard().text('Skip ✉️', 'skip_email');
+    await ctx.reply(
+      res.already
+        ? 'You are on the waitlist. Please reply with your email (optional), or tap Skip.'
+        : '🎉 You are on the waitlist! Please reply with your email (optional), or tap Skip.',
+      { reply_markup: keyboard }
+    );
   } else {
     await ctx.answerCallbackQuery('Unknown action');
   }
@@ -275,8 +247,67 @@ bot.on('message:text', async (ctx) => {
   if (text.startsWith('/')) {
     return;
   }
-  
-  await ctx.reply(`You said: "${text}"`);
+  const from = ctx.from;
+  if (!from) return;
+
+  const state = waitlistFlow.get(from.id);
+  if (!state) {
+    // No active flow; ignore or provide gentle hint
+    return;
+  }
+
+  if (state === 'awaiting_email') {
+    const email = text.trim();
+    if (email.toLowerCase() === 'skip') {
+      // simulate skip via text
+      waitlistFlow.set(from.id, 'awaiting_wallet');
+      const keyboard = new InlineKeyboard().text('Skip 💼', 'skip_wallet');
+      await ctx.reply('No worries. Now, reply with your Solana wallet (optional), or tap Skip.', {
+        reply_markup: keyboard,
+      });
+      return;
+    }
+    if (!isValidEmail(email)) {
+      await ctx.reply('That email does not look valid. Please try again or type "skip".');
+      return;
+    }
+    const joined = await isInWaitlist(from.id);
+    if (!joined) await joinWaitlist({ id: from.id, username: from.username, first_name: (from as any).first_name, last_name: (from as any).last_name }, 'flow_email');
+    const ok = await setWaitlistEmail(from.id, email);
+    if (!ok) {
+      await ctx.reply('❌ Could not save your email. Try again later or type "skip".');
+      return;
+    }
+    waitlistFlow.set(from.id, 'awaiting_wallet');
+    const keyboard = new InlineKeyboard().text('Skip 💼', 'skip_wallet');
+    await ctx.reply('✉️ Email saved. Now, reply with your Solana wallet (optional), or tap Skip.', {
+      reply_markup: keyboard,
+    });
+    return;
+  }
+
+  if (state === 'awaiting_wallet') {
+    const wallet = text.trim();
+    if (wallet.toLowerCase() === 'skip') {
+      waitlistFlow.delete(from.id);
+      await ctx.reply('All set! Thanks for joining. We will be in touch.');
+      return;
+    }
+    if (!isValidSolanaAddress(wallet)) {
+      await ctx.reply('That does not look like a valid Solana address. Please try again or type "skip".');
+      return;
+    }
+    const joined = await isInWaitlist(from.id);
+    if (!joined) await joinWaitlist({ id: from.id, username: from.username, first_name: (from as any).first_name, last_name: (from as any).last_name }, 'flow_wallet');
+    const ok = await setWaitlistWallet(from.id, wallet);
+    if (!ok) {
+      await ctx.reply('❌ Could not save your wallet. Try again later or type "skip".');
+      return;
+    }
+    waitlistFlow.delete(from.id);
+    await ctx.reply('💼 Wallet saved. All set! Thanks for joining.');
+    return;
+  }
 });
 
   // Error handling

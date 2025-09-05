@@ -39,7 +39,7 @@
 - CI/Checks: ensure `pnpm lint` and `pnpm type-check` pass before requesting review.
 
 ## Security & Configuration Tips
-- Required env vars: `BOT_TOKEN`, `WEBHOOK_SECRET`, `PUBLIC_URL` (webhooks), `SUPABASE_URL`, `SUPABASE_ANON_KEY`, optional `SUPABASE_SERVICE_ROLE`.
+- Required env vars: `BOT_TOKEN`, `WEBHOOK_SECRET`, `PUBLIC_URL` (webhooks), `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE` (required in production).
 - Validate env via `src/lib/env.ts`. Keep webhook handlers fast; offload heavy work to `src/worker/`.
 - For local webhooks, use a tunnel (e.g., ngrok) then run: `PUBLIC_URL=https://... pnpm bot:set-webhook`.
 

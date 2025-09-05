@@ -16,14 +16,24 @@ export function getSupabase(): SupabaseClient {
 export function getSupabaseAdmin(): SupabaseClient {
   if (_supabaseAdmin) return _supabaseAdmin;
   
-  _supabaseAdmin = env.SUPABASE_SERVICE_ROLE
-    ? createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE, {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
-      })
-    : getSupabase();
+  const hasServiceRole = Boolean(env.SUPABASE_SERVICE_ROLE && env.SUPABASE_SERVICE_ROLE.length > 0);
+  if (!hasServiceRole) {
+    // In production, never fall back to anon for admin operations
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('SUPABASE_SERVICE_ROLE is not set in production environment');
+    }
+    // In development, fall back but warn loudly
+    console.warn('[supabaseAdmin] SUPABASE_SERVICE_ROLE not set; falling back to anon key (dev only)');
+    _supabaseAdmin = getSupabase();
+    return _supabaseAdmin;
+  }
+
+  _supabaseAdmin = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE!, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
     
   return _supabaseAdmin;
 }

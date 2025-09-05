@@ -43,7 +43,7 @@ Required environment variables:
 - `PUBLIC_URL`: Your deployed Vercel URL (only needed for webhooks)
 - `SUPABASE_URL`: Your Supabase project URL
 - `SUPABASE_ANON_KEY`: Your Supabase anon key
-- `SUPABASE_SERVICE_ROLE`: Your Supabase service role key (optional, for admin operations)
+- `SUPABASE_SERVICE_ROLE`: Your Supabase service role key (required in production for server-side storage)
 
 ### 3. Database Setup (Prisma)
 

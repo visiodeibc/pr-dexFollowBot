@@ -9,6 +9,9 @@ const validators = {
   SUPABASE_ANON_KEY: z.string().min(1, 'SUPABASE_ANON_KEY is required'),
   SUPABASE_SERVICE_ROLE: z.string().optional(),
   DATABASE_URL: z.string().url().optional(),
+  // AI / external services
+  OPENAI_API_KEY: z.string().optional(),
+  GOOGLE_MAPS_API_KEY: z.string().optional(),
 } as const;
 
 type Env = {
@@ -19,6 +22,8 @@ type Env = {
   SUPABASE_ANON_KEY: string;
   SUPABASE_SERVICE_ROLE?: string;
   DATABASE_URL?: string;
+  OPENAI_API_KEY?: string;
+  GOOGLE_MAPS_API_KEY?: string;
 };
 
 const cache = new Map<keyof Env, string | undefined>();

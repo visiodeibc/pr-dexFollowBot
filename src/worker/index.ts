@@ -5,6 +5,7 @@ dotenv.config({ path: '.env.local' });
 dotenv.config();
 import { bot } from '../bot/bot';
 import { getSupabaseAdmin, updateJobStatus, type JobRecord } from '../lib/supabase';
+import { runReelsPipeline } from '../lib/reels-pipeline';
 
 const POLL_INTERVAL = 5000; // 5 seconds
 const MAX_RETRIES = 3;
@@ -36,6 +37,19 @@ const jobProcessors: JobProcessor = {
   
   // Add more job types here
   // example_job: async (job: JobRecord) => { ... }
+  reels_scrape: async (job: JobRecord) => {
+    const url: string | undefined = job.payload?.url;
+    const shortcode: string | undefined = job.payload?.shortcode;
+    if (!url || !shortcode) throw new Error('Missing url or shortcode in job payload');
+
+    const { bullets } = await runReelsPipeline(url);
+    const text = bullets.length > 0
+      ? `📍 Places for ${shortcode}:\n\n${bullets.join('\n')}`
+      : `No places extracted for ${shortcode}.`;
+    await bot().api.sendMessage(job.chat_id, text);
+
+    await updateJobStatus(job.id, 'completed', { bullets });
+  },
 };
 
 async function processJob(job: JobRecord): Promise<void> {

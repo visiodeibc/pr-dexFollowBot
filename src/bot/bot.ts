@@ -1,6 +1,7 @@
 import { Bot, GrammyError, HttpError, InlineKeyboard } from 'grammy';
 import { env } from '@/lib/env';
 import { joinWaitlist, isInWaitlist, setWaitlistEmail, setWaitlistWallet } from '@/lib/waitlist';
+import { createJob } from '@/lib/supabase';
 
 // Lazy bot instance creation
 let _bot: Bot | null = null;
@@ -58,7 +59,8 @@ function setupBotHandlers(bot: Bot) {
   }
 
 // Simple in-memory flow state (best-effort; Stage 1)
-const waitlistFlow = new Map<number, 'awaiting_email' | 'awaiting_wallet'>();
+type FlowState = 'awaiting_email' | 'awaiting_wallet' | 'awaiting_reels_url';
+const waitlistFlow = new Map<number, FlowState>();
 
 // Start command with inline keyboard
 bot.command('start', async (ctx) => {
@@ -67,6 +69,8 @@ bot.command('start', async (ctx) => {
     .row()
     .text('✉️ Add email', 'add_email')
     .text('💼 Add wallet', 'add_wallet')
+    .row()
+    .text('🎬 Reels → Maps', 'reels_start')
     .row()
     .text('🏓 Ping me!', 'ping');
 
@@ -87,7 +91,8 @@ bot.command('help', async (ctx) => {
 
 /start - Get started with the bot
 /help - Show this help message
-/waitlist - Join the free early-access waitlist (will ask for email & wallet)`
+/waitlist - Join the free early-access waitlist (will ask for email & wallet)
+/reels - Convert an Instagram Reel/Post URL into Google Maps places`
   );
 });
 
@@ -121,6 +126,29 @@ bot.command('waitlist', async (ctx) => {
     { reply_markup: keyboard }
   );
 });
+
+// Reels command (entry to flow)
+bot.command('reels', async (ctx) => {
+  const from = ctx.from;
+  if (!from) return;
+  waitlistFlow.set(from.id, 'awaiting_reels_url');
+  const keyboard = new InlineKeyboard().text('Cancel ❌', 'reels_cancel');
+  await ctx.reply(
+    'Send me an Instagram reel/post URL (e.g., https://www.instagram.com/reel/XXXX/).',
+    { reply_markup: keyboard }
+  );
+});
+
+// Helpers: URL validators
+function extractInstaShortcode(url: string): string | null {
+  try {
+    const u = new URL(url.trim());
+    const m = u.pathname.match(/^\/(?:reel|p)\/([A-Za-z0-9_-]+)(?:\/|$)/);
+    return m ? m[1] : null;
+  } catch {
+    return null;
+  }
+}
 
 // Helpers: validators
 function isValidEmail(email: string): boolean {
@@ -205,6 +233,24 @@ bot.on('callback_query:data', async (ctx) => {
     if (!from) return;
     waitlistFlow.delete(from.id);
     await ctx.reply('All set! Thanks for joining. We will be in touch.');
+  } else if (data === 'reels_start') {
+    await ctx.answerCallbackQuery();
+    const from = ctx.from;
+    if (!from) return;
+    waitlistFlow.set(from.id, 'awaiting_reels_url');
+    const keyboard = new InlineKeyboard().text('Cancel ❌', 'reels_cancel');
+    await ctx.reply(
+      'Send me an Instagram reel/post URL (e.g., https://www.instagram.com/reel/XXXX/).',
+      { reply_markup: keyboard }
+    );
+  } else if (data === 'reels_cancel') {
+    await ctx.answerCallbackQuery('Canceled');
+    const from = ctx.from;
+    if (!from) return;
+    if (waitlistFlow.get(from.id) === 'awaiting_reels_url') {
+      waitlistFlow.delete(from.id);
+    }
+    await ctx.reply('Canceled. You can restart anytime with /reels');
   } else if (data === 'join_waitlist') {
     const from = ctx.from;
     if (!from) {
@@ -306,6 +352,41 @@ bot.on('message:text', async (ctx) => {
     }
     waitlistFlow.delete(from.id);
     await ctx.reply('💼 Wallet saved. All set! Thanks for joining.');
+    return;
+  }
+
+  if (state === 'awaiting_reels_url') {
+    const url = text.trim();
+    const sc = extractInstaShortcode(url);
+    if (!sc) {
+      await ctx.reply('Invalid Instagram URL. Please send a /reel or /p link, or tap Cancel.');
+      return;
+    }
+
+    // Create background job
+    const chatId = ctx.chat?.id;
+    if (!chatId) {
+      await ctx.reply('Could not read chat. Please try again.');
+      return;
+    }
+    const job = await createJob('reels_scrape', Number(chatId), {
+      url,
+      shortcode: sc,
+      from: {
+        id: from.id,
+        username: from.username,
+        first_name: (from as any).first_name,
+        last_name: (from as any).last_name,
+      },
+    });
+    if (!job) {
+      await ctx.reply('❌ Failed to enqueue your request. Please try again later.');
+      return;
+    }
+    waitlistFlow.delete(from.id);
+    await ctx.reply(
+      `🎬 Got it! Processing your reel (${sc}). I’ll send the results here when ready.`
+    );
     return;
   }
 });

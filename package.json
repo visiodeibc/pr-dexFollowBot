@@ -1,7 +1,7 @@
 {
   "name": "telegram-bot-vercel",
   "version": "1.0.0",
-  "description": "A Telegram bot built with Next.js, grammY, and Supabase, deployable on Vercel",
+  "description": "OmniMap Agent — map data extraction and analysis bot for Telegram (Next.js + grammY + Supabase)",
   "main": "index.js",
   "engines": {
     "node": ">=18.18"
@@ -22,10 +22,13 @@
     "prisma:deploy:pooler": "DIRECT_URL=\"$DATABASE_URL\" prisma migrate deploy"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^2.0.30",
     "@prisma/client": "^5.18.0",
     "@supabase/supabase-js": "^2.38.0",
+    "ai": "^5.0.44",
     "dotenv": "^16.4.5",
     "grammy": "^1.19.0",
+    "instagram-url-direct": "^2.0.7",
     "next": "^14.0.0",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",

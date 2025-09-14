@@ -12,6 +12,9 @@ const validators = {
   // AI / external services
   OPENAI_API_KEY: z.string().optional(),
   GOOGLE_MAPS_API_KEY: z.string().optional(),
+  // Instagram login (optional for media resolution via Playwright)
+  IG_SESSION_ID: z.string().optional(),
+  IG_USER_AGENT: z.string().optional(),
 } as const;
 
 type Env = {
@@ -24,6 +27,8 @@ type Env = {
   DATABASE_URL?: string;
   OPENAI_API_KEY?: string;
   GOOGLE_MAPS_API_KEY?: string;
+  IG_SESSION_ID?: string;
+  IG_USER_AGENT?: string;
 };
 
 const cache = new Map<keyof Env, string | undefined>();

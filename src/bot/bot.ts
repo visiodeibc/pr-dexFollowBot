@@ -1,7 +1,5 @@
 import { Bot, GrammyError, HttpError, InlineKeyboard } from 'grammy';
 import { env } from '@/lib/env';
-import { joinWaitlist, isInWaitlist, setWaitlistEmail, setWaitlistWallet } from '@/lib/waitlist';
-import { createJob } from '@/lib/supabase';
 
 // Lazy bot instance creation
 let _bot: Bot | null = null;
@@ -58,28 +56,21 @@ function setupBotHandlers(bot: Bot) {
     });
   }
 
-// Simple in-memory flow state (best-effort; Stage 1)
-type FlowState = 'awaiting_email' | 'awaiting_wallet' | 'awaiting_reels_url';
-const waitlistFlow = new Map<number, FlowState>();
+// No conversational flow currently; placeholder only
 
 // Start command with inline keyboard
 bot.command('start', async (ctx) => {
   const keyboard = new InlineKeyboard()
-    .text('📝 Join waitlist', 'join_waitlist')
-    .row()
-    .text('✉️ Add email', 'add_email')
-    .text('💼 Add wallet', 'add_wallet')
-    .row()
     .text('🎬 Reels → Maps', 'reels_start')
     .row()
     .text('🏓 Ping me!', 'ping');
 
   await ctx.reply(
-    `🤖 Crypto Wallet Follow Bot (Solana‑first)
+    `🗺️ OmniMap Agent
 
-✨ Follow any Solana wallet and receive instant, human‑readable trade & transfer summaries right in Telegram.
+Extract places from content and turn them into useful map links.
 
-Be among the first to try it (free beta). Tap “📝 Join waitlist” below or send /waitlist.`,
+Reels → Maps is under construction — tap to see status.`,
     { reply_markup: keyboard }
   );
 });
@@ -90,76 +81,11 @@ bot.command('help', async (ctx) => {
     `📚 Available commands:
 
 /start - Get started with the bot
-/help - Show this help message
-/waitlist - Join the free early-access waitlist (will ask for email & wallet)
-/reels - Convert an Instagram Reel/Post URL into Google Maps places`
+/help - Show this help message`
   );
 });
 
-// Waitlist command
-bot.command('waitlist', async (ctx) => {
-  const from = ctx.from;
-  if (!from) {
-    await ctx.reply('Could not read your user info. Please try again.');
-    return;
-  }
-  const res = await joinWaitlist(
-    {
-      id: from.id,
-      username: from.username,
-      first_name: (from as any).first_name,
-      last_name: (from as any).last_name,
-    },
-    'command'
-  );
-
-  if (!res.ok) {
-    await ctx.reply('❌ Failed to join the waitlist. Please try again later.');
-    return;
-  }
-  waitlistFlow.set(from.id, 'awaiting_email');
-  const keyboard = new InlineKeyboard().text('Skip ✉️', 'skip_email');
-  await ctx.reply(
-    res.already
-      ? 'You are on the waitlist. Please reply with your email (optional), or tap Skip.'
-      : '🎉 You are on the waitlist! Please reply with your email (optional), or tap Skip.',
-    { reply_markup: keyboard }
-  );
-});
-
-// Reels command (entry to flow)
-bot.command('reels', async (ctx) => {
-  const from = ctx.from;
-  if (!from) return;
-  waitlistFlow.set(from.id, 'awaiting_reels_url');
-  const keyboard = new InlineKeyboard().text('Cancel ❌', 'reels_cancel');
-  await ctx.reply(
-    'Send me an Instagram reel/post URL (e.g., https://www.instagram.com/reel/XXXX/).',
-    { reply_markup: keyboard }
-  );
-});
-
-// Helpers: URL validators
-function extractInstaShortcode(url: string): string | null {
-  try {
-    const u = new URL(url.trim());
-    const m = u.pathname.match(/^\/(?:reel|p)\/([A-Za-z0-9_-]+)(?:\/|$)/);
-    return m ? m[1] : null;
-  } catch {
-    return null;
-  }
-}
-
-// Helpers: validators
-function isValidEmail(email: string): boolean {
-  // Simple RFC5322-ish sanity check
-  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim());
-}
-
-function isValidSolanaAddress(addr: string): boolean {
-  // Base58 without 0,O,I,l; typical length ~32-44
-  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(addr.trim());
-}
+// No /reels command while feature is WIP
 
 // Handle callback queries (inline keyboard buttons)
 bot.on('callback_query:data', async (ctx) => {
@@ -168,228 +94,15 @@ bot.on('callback_query:data', async (ctx) => {
   if (data === 'ping') {
     await ctx.answerCallbackQuery('Pong! 🏓');
     await ctx.reply('🏓 Pong! The bot is working perfectly!');
-  } else if (data === 'add_email') {
-    await ctx.answerCallbackQuery();
-    const from = ctx.from;
-    if (!from) return;
-    const joined = await isInWaitlist(from.id);
-    if (!joined) {
-      const res = await joinWaitlist(
-        {
-          id: from.id,
-          username: from.username,
-          first_name: (from as any).first_name,
-          last_name: (from as any).last_name,
-        },
-        'start_add_email'
-      );
-      if (!res.ok) {
-        await ctx.reply('❌ Failed to join the waitlist. Please try again later.');
-        return;
-      }
-    }
-    waitlistFlow.set(from!.id, 'awaiting_email');
-    const keyboard = new InlineKeyboard().text('Skip ✉️', 'skip_email');
-    await ctx.reply('Please reply with your email (optional), or tap Skip.', {
-      reply_markup: keyboard,
-    });
-  } else if (data === 'add_wallet') {
-    await ctx.answerCallbackQuery();
-    const from = ctx.from;
-    if (!from) return;
-    const joined = await isInWaitlist(from.id);
-    if (!joined) {
-      const res = await joinWaitlist(
-        {
-          id: from.id,
-          username: from.username,
-          first_name: (from as any).first_name,
-          last_name: (from as any).last_name,
-        },
-        'start_add_wallet'
-      );
-      if (!res.ok) {
-        await ctx.reply('❌ Failed to join the waitlist. Please try again later.');
-        return;
-      }
-    }
-    waitlistFlow.set(from!.id, 'awaiting_wallet');
-    const keyboard = new InlineKeyboard().text('Skip 💼', 'skip_wallet');
-    await ctx.reply('Please reply with your Solana wallet (optional), or tap Skip.', {
-      reply_markup: keyboard,
-    });
-  } else if (data === 'skip_email') {
-    await ctx.answerCallbackQuery('Skipped email');
-    const from = ctx.from;
-    if (!from) return;
-    waitlistFlow.set(from.id, 'awaiting_wallet');
-    const keyboard = new InlineKeyboard().text('Skip 💼', 'skip_wallet');
-    await ctx.reply('No worries. Now, reply with your Solana wallet (optional), or tap Skip.', {
-      reply_markup: keyboard,
-    });
-  } else if (data === 'skip_wallet') {
-    await ctx.answerCallbackQuery('All set!');
-    const from = ctx.from;
-    if (!from) return;
-    waitlistFlow.delete(from.id);
-    await ctx.reply('All set! Thanks for joining. We will be in touch.');
   } else if (data === 'reels_start') {
-    await ctx.answerCallbackQuery();
-    const from = ctx.from;
-    if (!from) return;
-    waitlistFlow.set(from.id, 'awaiting_reels_url');
-    const keyboard = new InlineKeyboard().text('Cancel ❌', 'reels_cancel');
-    await ctx.reply(
-      'Send me an Instagram reel/post URL (e.g., https://www.instagram.com/reel/XXXX/).',
-      { reply_markup: keyboard }
-    );
-  } else if (data === 'reels_cancel') {
-    await ctx.answerCallbackQuery('Canceled');
-    const from = ctx.from;
-    if (!from) return;
-    if (waitlistFlow.get(from.id) === 'awaiting_reels_url') {
-      waitlistFlow.delete(from.id);
-    }
-    await ctx.reply('Canceled. You can restart anytime with /reels');
-  } else if (data === 'join_waitlist') {
-    const from = ctx.from;
-    if (!from) {
-      await ctx.answerCallbackQuery('Could not read your user.');
-      return;
-    }
-    const res = await joinWaitlist(
-      {
-        id: from.id,
-        username: from.username,
-        first_name: (from as any).first_name,
-        last_name: (from as any).last_name,
-      },
-      'start_button'
-    );
-    if (!res.ok) {
-      await ctx.answerCallbackQuery('Failed. Try again later.');
-      await ctx.reply('❌ Failed to join the waitlist. Please try again later.');
-      return;
-    }
-    await ctx.answerCallbackQuery(res.already ? 'Already joined ✅' : 'Joined! 🎉');
-    waitlistFlow.set(from.id, 'awaiting_email');
-    const keyboard = new InlineKeyboard().text('Skip ✉️', 'skip_email');
-    await ctx.reply(
-      res.already
-        ? 'You are on the waitlist. Please reply with your email (optional), or tap Skip.'
-        : '🎉 You are on the waitlist! Please reply with your email (optional), or tap Skip.',
-      { reply_markup: keyboard }
-    );
+    await ctx.answerCallbackQuery('WIP');
+    await ctx.reply('🎬 Reels → Maps is a work in progress. I will update this soon!');
   } else {
     await ctx.answerCallbackQuery('Unknown action');
   }
 });
 
-// Handle all text messages (fallback)
-bot.on('message:text', async (ctx) => {
-  const text = ctx.message.text;
-  
-  // Skip if it's a command (already handled above)
-  if (text.startsWith('/')) {
-    return;
-  }
-  const from = ctx.from;
-  if (!from) return;
-
-  const state = waitlistFlow.get(from.id);
-  if (!state) {
-    // No active flow; ignore or provide gentle hint
-    return;
-  }
-
-  if (state === 'awaiting_email') {
-    const email = text.trim();
-    if (email.toLowerCase() === 'skip') {
-      // simulate skip via text
-      waitlistFlow.set(from.id, 'awaiting_wallet');
-      const keyboard = new InlineKeyboard().text('Skip 💼', 'skip_wallet');
-      await ctx.reply('No worries. Now, reply with your Solana wallet (optional), or tap Skip.', {
-        reply_markup: keyboard,
-      });
-      return;
-    }
-    if (!isValidEmail(email)) {
-      await ctx.reply('That email does not look valid. Please try again or type "skip".');
-      return;
-    }
-    const joined = await isInWaitlist(from.id);
-    if (!joined) await joinWaitlist({ id: from.id, username: from.username, first_name: (from as any).first_name, last_name: (from as any).last_name }, 'flow_email');
-    const ok = await setWaitlistEmail(from.id, email);
-    if (!ok) {
-      await ctx.reply('❌ Could not save your email. Try again later or type "skip".');
-      return;
-    }
-    waitlistFlow.set(from.id, 'awaiting_wallet');
-    const keyboard = new InlineKeyboard().text('Skip 💼', 'skip_wallet');
-    await ctx.reply('✉️ Email saved. Now, reply with your Solana wallet (optional), or tap Skip.', {
-      reply_markup: keyboard,
-    });
-    return;
-  }
-
-  if (state === 'awaiting_wallet') {
-    const wallet = text.trim();
-    if (wallet.toLowerCase() === 'skip') {
-      waitlistFlow.delete(from.id);
-      await ctx.reply('All set! Thanks for joining. We will be in touch.');
-      return;
-    }
-    if (!isValidSolanaAddress(wallet)) {
-      await ctx.reply('That does not look like a valid Solana address. Please try again or type "skip".');
-      return;
-    }
-    const joined = await isInWaitlist(from.id);
-    if (!joined) await joinWaitlist({ id: from.id, username: from.username, first_name: (from as any).first_name, last_name: (from as any).last_name }, 'flow_wallet');
-    const ok = await setWaitlistWallet(from.id, wallet);
-    if (!ok) {
-      await ctx.reply('❌ Could not save your wallet. Try again later or type "skip".');
-      return;
-    }
-    waitlistFlow.delete(from.id);
-    await ctx.reply('💼 Wallet saved. All set! Thanks for joining.');
-    return;
-  }
-
-  if (state === 'awaiting_reels_url') {
-    const url = text.trim();
-    const sc = extractInstaShortcode(url);
-    if (!sc) {
-      await ctx.reply('Invalid Instagram URL. Please send a /reel or /p link, or tap Cancel.');
-      return;
-    }
-
-    // Create background job
-    const chatId = ctx.chat?.id;
-    if (!chatId) {
-      await ctx.reply('Could not read chat. Please try again.');
-      return;
-    }
-    const job = await createJob('reels_scrape', Number(chatId), {
-      url,
-      shortcode: sc,
-      from: {
-        id: from.id,
-        username: from.username,
-        first_name: (from as any).first_name,
-        last_name: (from as any).last_name,
-      },
-    });
-    if (!job) {
-      await ctx.reply('❌ Failed to enqueue your request. Please try again later.');
-      return;
-    }
-    waitlistFlow.delete(from.id);
-    await ctx.reply(
-      `🎬 Got it! Processing your reel (${sc}). I’ll send the results here when ready.`
-    );
-    return;
-  }
-});
+// No text handlers currently
 
   // Error handling
   bot.catch((err) => {

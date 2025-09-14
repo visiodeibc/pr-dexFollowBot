@@ -1,8 +1,8 @@
-# 🤖 Crypto Wallet Follow Bot
+# 🗺️ OmniMap Agent
 
-A production-ready Telegram bot built with **Next.js 14**, **grammY**, and **Supabase**, designed to run seamlessly on **Vercel** with webhook support and optional background worker processing.
+A production-ready Telegram bot built with **Next.js 14**, **grammY**, and **Supabase**, designed to run seamlessly on **Vercel** with webhook support and an optional background worker.
 
-This project is evolving into a crypto wallet follow bot. Initial scope focuses on Solana. Users will be able to follow wallets and receive summarized transaction updates in Telegram. We’re rolling out in stages to validate demand and iterate quickly.
+Objective: Extract, analyze, and enrich map data from user-provided content. Start with Instagram Reels → likely places with Google Maps links; expand to more sources and propose map update suggestions.
 
 ## ✨ Features
 
@@ -12,7 +12,7 @@ This project is evolving into a crypto wallet follow bot. Initial scope focuses 
 - 🏗️ **TypeScript**: Fully typed with strict mode enabled
 - 🔒 **Secure**: Webhook secret validation and environment variable validation
 - 🎯 **Modern stack**: Next.js 14 App Router, grammY, Zod validation
-- 📝 **Waitlist capture (Stage 1)**: Users can join a free early-access waitlist via `/waitlist` or the Start button
+- 🧭 **Map extraction (WIP)**: From content → candidate places with links
 
 ## 🚀 Quick Start
 
@@ -21,7 +21,7 @@ This project is evolving into a crypto wallet follow bot. Initial scope focuses 
 ```bash
 # Clone the repository
 git clone <your-repo-url>
-cd telegram-bot-vercel
+cd pr-omnimapAgent
 
 # Install dependencies
 pnpm install
@@ -45,6 +45,8 @@ Required environment variables:
 - `SUPABASE_ANON_KEY`: Your Supabase anon key
 - `SUPABASE_SERVICE_ROLE`: Your Supabase service role key (required in production for server-side storage)
 
+Optional (future extraction enrichments): None required today. We will document additional keys when features land.
+
 ### 3. Database Setup (Prisma)
 
 This project uses Prisma to manage the Supabase (Postgres) schema. No manual SQL is required.
@@ -63,7 +65,7 @@ pnpm prisma:generate
 pnpm prisma:deploy   # applies the checked-in migrations
 ```
 
-That’s it. The checked-in Prisma schema defines the `waitlist` and `jobs` tables used by the bot and worker.
+That’s it. The checked-in Prisma schema defines the `jobs` table used by the bot and worker.
 
 ### 4. Development Modes
 
@@ -108,6 +110,12 @@ pnpm worker:dev
 
 In production, you can run the worker as a separate service or scheduled function.
 
+### 6.5. Reels → Maps (WIP)
+
+- Telegram UI: The “🎬 Reels → Maps” button exists and replies with a placeholder.
+- Extraction core: A plugin-based orchestrator is scaffolded to support Instagram/TikTok/text inputs.
+- Worker: A generic `extract` job is available that routes inputs through the orchestrator and replies with a summary.
+
 ### 7. Prisma (Schema Management)
 
 We use Prisma to manage the Postgres (Supabase) schema. Set `DATABASE_URL` in `.env.local` to your Supabase connection string.
@@ -126,7 +134,7 @@ pnpm prisma:deploy
 ```
 
 Notes:
-- The Prisma schema defines `waitlist` and `jobs` to match this project.
+- The Prisma schema defines `jobs` to match this project.
 - This repo includes an initial migration; use `pnpm prisma:deploy` to apply it in CI/prod.
 - Ensure `DATABASE_URL` uses the pooled (non-readonly) connection string and set `DIRECT_URL` for migrations.
 
@@ -156,10 +164,17 @@ The schema is configured to use a pooled URL for runtime and a direct URL for mi
 src/
 ├── app/api/tg/route.ts      # Webhook endpoint for Vercel
 ├── bot/bot.ts               # grammY bot instance and handlers
+├── core/                    # Extraction core (types, registry, orchestrator)
+│   ├── types.ts
+│   ├── registry.ts
+│   └── orchestrator.ts
 ├── lib/
 │   ├── env.ts              # Environment validation with Zod
 │   └── supabase.ts         # Supabase client setup
-│   └── waitlist.ts         # Waitlist helpers (Stage 1)
+├── plugins/                 # Pluggable extractors (scaffolded)
+│   ├── instagram.ts
+│   ├── tiktok.ts
+│   └── text.ts
 ├── worker/index.ts         # Background job processor
 └── dev.ts                  # Local polling mode script
 scripts/
@@ -168,11 +183,39 @@ prisma/
 └── schema.prisma           # Prisma schema for Postgres (Supabase)
 ```
 
+## 🧩 Architecture
+
+- Plugin-based extraction with a small core:
+  - `core/types.ts`: Common types for inputs, results, and plugins
+  - `core/registry.ts`: Runtime plugin registry (register/get)
+  - `core/orchestrator.ts`: Routes inputs to the best plugin
+  - `plugins/*`: One module per platform/source (Instagram, TikTok, Text)
+- Scales to multiple platforms and input kinds without coupling bot or worker code to platform specifics.
+
+### Add a new plugin (example)
+
+```ts
+// src/plugins/my-source.ts
+import type { ExtractorPlugin, InputRequest, ExtractionResult } from '@/core/types';
+
+const plugin: ExtractorPlugin = {
+  name: 'my-source',
+  canHandle(input) {
+    return /my-source\.com/.test(input.content) ? 0.9 : 0;
+  },
+  async extract(input): Promise<ExtractionResult> {
+    // TODO: implement
+    return { places: [], summary: 'My source WIP' };
+  },
+};
+
+export default plugin;
+```
+
 ## 🤖 Bot Commands
 
 - `/start` - Welcome message with interactive buttons
 - `/help` - List available commands
-- `/waitlist` - Join the free early-access waitlist (asks for email and wallet inline)
 
 ## 🔧 Scripts
 
@@ -182,9 +225,15 @@ prisma/
 | `pnpm build` | Build for production |
 | `pnpm start` | Start production server |
 | `pnpm lint` | Run ESLint |
+| `pnpm lint:fix` | Run ESLint with auto-fix |
+| `pnpm type-check` | TypeScript checks without emitting |
 | `pnpm bot:dev` | Start bot in polling mode (development) |
 | `pnpm bot:set-webhook` | Register webhook with Telegram |
 | `pnpm worker:dev` | Start background worker |
+| `pnpm prisma:generate` | Generate Prisma client |
+| `pnpm prisma:migrate` | Create/apply a migration from schema |
+| `pnpm prisma:deploy` | Apply pending migrations (CI/prod) |
+| `pnpm prisma:deploy:pooler` | Migrate via pooled DATABASE_URL (fallback) |
 
 ## 🔐 Security Notes
 
@@ -213,22 +262,27 @@ prisma/
 3. Bot receives updates via webhooks
 4. Scale background worker as needed
 
-## 🗺️ Rollout Stages
+## 🧭 Roadmap
 
-Stage 1 — Gathering Users (now)
-- Add waitlist command and inline button to collect interest
-- Store Telegram user metadata into `waitlist`
-- Keep messaging clear about Solana-only initial support
+Phase 1 — Extraction
+- [x] Instagram Reels/Post → candidate places with Google Maps links
+- [ ] Accept other inputs (plain text, websites) to extract places
+- [ ] Export results as JSON/CSV for downstream use
 
-Stage 2 — Beta (usage tracking)
-- Let users add Solana wallet addresses to follow
-- Track usage events to tune UX and infra
-- Summarize wallet transactions and post to Telegram (webhooks preferred; fallback to cron)
+Phase 2 — Enrichment
+- [ ] Enrich places via Google Places/OpenStreetMap details
+- [ ] De-duplicate/merge candidates; confidence scoring
+- [ ] Region hints and language handling
 
-Stage 3 — Paywall
-- Decide pricing based on Stage 2 data
-- Add in-bot paywall and quotas
-- Monetize while maintaining free tier for light usage
+Phase 3 — Update Suggestions
+- [ ] Generate suggested map updates (e.g., OSM edits) for review
+- [ ] Human-in-the-loop review flows inside Telegram
+- [ ] Track applied/approved suggestions
+
+Phase 4 — Usage & Billing (optional)
+- [ ] Usage logging and quotas
+- [ ] Team sharing / collaboration
+- [ ] Billing integration if needed
 
 ## 🔧 Customization
 
@@ -249,11 +303,8 @@ bot.command('newcommand', async (ctx) => {
 ### Database Extensions
 Extend the Supabase schema as needed for your use case.
 
-## 🧪 Stage 1 Validation Tips
-- Share the bot in relevant channels and communities
-- Use `/waitlist` and the Start button to collect interest quickly
-- After joining, the bot will ask for email and wallet inline (optional)
-- Review `waitlist` table to gauge demand and note feedback
+## 🧪 Usage Tips
+- Click the “🎬 Reels → Maps” button in `/start` to see status (WIP)
 
 ## 🐛 Troubleshooting
 
@@ -271,6 +322,9 @@ Extend the Supabase schema as needed for your use case.
 - Verify Supabase credentials
 - Check table permissions
 - Ensure tables exist
+
+### Feature placeholders
+- Reels → Maps: currently returns a placeholder. No action required.
 
 ## 📝 License
 

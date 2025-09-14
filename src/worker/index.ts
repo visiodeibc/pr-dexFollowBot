@@ -5,7 +5,8 @@ dotenv.config({ path: '.env.local' });
 dotenv.config();
 import { bot } from '../bot/bot';
 import { getSupabaseAdmin, updateJobStatus, type JobRecord } from '../lib/supabase';
-import { runReelsPipeline } from '../lib/reels-pipeline';
+import { routeAndExtract } from '../core/orchestrator';
+import type { InputRequest } from '../core/types';
 
 const POLL_INTERVAL = 5000; // 5 seconds
 const MAX_RETRIES = 3;
@@ -37,18 +38,20 @@ const jobProcessors: JobProcessor = {
   
   // Add more job types here
   // example_job: async (job: JobRecord) => { ... }
-  reels_scrape: async (job: JobRecord) => {
-    const url: string | undefined = job.payload?.url;
-    const shortcode: string | undefined = job.payload?.shortcode;
-    if (!url || !shortcode) throw new Error('Missing url or shortcode in job payload');
-
-    const { bullets } = await runReelsPipeline(url);
-    const text = bullets.length > 0
-      ? `📍 Places for ${shortcode}:\n\n${bullets.join('\n')}`
-      : `No places extracted for ${shortcode}.`;
+  // Generic extraction job (scaffolded)
+  extract: async (job: JobRecord) => {
+    const input: InputRequest | undefined = job.payload?.input;
+    if (!input || !input.content) {
+      throw new Error('Missing input in job payload');
+    }
+    const result = await routeAndExtract(input);
+    const summary = result.summary || 'Extraction completed';
+    const bullets = (result.places || [])
+      .slice(0, 10)
+      .map((p) => `- ${p.name} (${Math.round(p.confidence * 100)}%)`);
+    const text = bullets.length > 0 ? `${summary}\n\n${bullets.join('\n')}` : summary;
     await bot().api.sendMessage(job.chat_id, text);
-
-    await updateJobStatus(job.id, 'completed', { bullets });
+    await updateJobStatus(job.id, 'completed', { result });
   },
 };
 
@@ -71,6 +74,10 @@ async function processJob(job: JobRecord): Promise<void> {
     console.log(`✅ Successfully processed job ${job.id} (${job.type})`);
   } catch (error) {
     console.error(`❌ Error processing job ${job.id}:`, error);
+    try {
+      // Best-effort user alert
+      await bot().api.sendMessage(job.chat_id, `❌ Job failed (${job.type}). ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } catch {}
     await updateJobStatus(
       job.id, 
       'failed', 

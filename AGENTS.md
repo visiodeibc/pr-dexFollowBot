@@ -45,33 +45,33 @@
 
 ## Prisma Setup
 - Add `DATABASE_URL` in `.env.local` using Supabase connection string (non-readonly).
-- Schema at `prisma/schema.prisma` defines `waitlist` and `jobs`.
+- Schema at `prisma/schema.prisma` defines `jobs`.
 - Commands: `pnpm prisma:generate`, `pnpm prisma:migrate --name <msg>`, `pnpm prisma:deploy`.
- - Prefer migrations via Prisma; avoid manual SQL DDL in docs.
+- Prefer migrations via Prisma; avoid manual SQL DDL in docs.
 
 
-## Product Rollout Checklist
+## Roadmap
 
-Stage 1 — Gathering Users (Waitlist)
-- [x] Add `/waitlist` command to store Telegram user into Supabase `waitlist`
-- [x] Add Start inline button: “Join waitlist”
-- [x] Create `src/lib/waitlist.ts` helper (insert, exists, setters)
-- [x] Conversational capture of email and wallet after `/waitlist` (with Skip)
-- [x] README/AGENTS updated with stage plan and schema
-- [ ] Share bot link in target communities/channels
+Phase 1 — Extraction
+- [ ] Instagram Reels/Post → candidate places with Google Maps links (WIP)
+- [ ] Accept other inputs (plain text, websites) to extract places
+- [ ] Export results as JSON/CSV for downstream use
 
-Stage 2 — Beta (Solana-only)
-- [ ] Command to add followed wallet(s) (Solana address validation)
-- [ ] Background tracking: webhook/cron to detect wallet transactions
-- [ ] Summarization of transactions and token info; post updates in Telegram
-- [ ] Usage logging (events) to inform pricing and UX
+Phase 2 — Enrichment
+- [ ] Enrich places via Google Places/OpenStreetMap details
+- [ ] De-duplicate/merge candidates; confidence scoring
+- [ ] Region hints and language handling
 
-Stage 3 — Paywall
-- [ ] Pricing policy based on Stage 2 usage data
-- [ ] In-bot paywall, quotas, and upgrade flows
-- [ ] Billing integration (Telegram payments or external)
-- [ ] Graceful limits and messaging for free tier
+Phase 3 — Update Suggestions
+- [ ] Generate suggested map updates (e.g., OSM edits) for review
+- [ ] Human-in-the-loop review flows inside Telegram
+- [ ] Track applied/approved suggestions
+
+Phase 4 — Usage & Billing (optional)
+- [ ] Usage logging and quotas
+- [ ] Team sharing / collaboration
+- [ ] Billing integration if needed
 
 Notes
-- Start with Solana; design abstractions for multi-chain later.
+- Focus on map data quality and operator UX.
 - Keep webhook handlers fast; defer heavy work to `src/worker/`.

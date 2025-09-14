@@ -55,6 +55,6 @@ export async function GET() {
   return NextResponse.json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
-    bot: 'telegram-bot-vercel'
+    bot: 'omnimap-agent'
   });
 }

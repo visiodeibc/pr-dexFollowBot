@@ -38,6 +38,7 @@ nano .env.local
 ```
 
 Required environment variables:
+
 - `BOT_TOKEN`: Get from [@BotFather](https://t.me/BotFather)
 - `WEBHOOK_SECRET`: Generate a long random string
 - `PUBLIC_URL`: Your deployed Vercel URL (only needed for webhooks)
@@ -51,14 +52,14 @@ Optional (future extraction enrichments): None required today. We will document 
 
 This project uses Prisma to manage the Supabase (Postgres) schema. No manual SQL is required.
 
-1) Add database env vars to `.env.local` (see `prisma/.env.example` for reference):
+1. Add database env vars to `.env.local` (see `prisma/.env.example` for reference):
 
 ```env
 DATABASE_URL="postgresql://..."   # Supabase Pooler URL (pgBouncer)
 DIRECT_URL="postgresql://..."     # Supabase Direct URL (5432)
 ```
 
-2) Generate the Prisma client and apply migrations:
+2. Generate the Prisma client and apply migrations:
 
 ```bash
 pnpm prisma:generate
@@ -70,12 +71,14 @@ That’s it. The checked-in Prisma schema defines the `jobs` table used by the b
 ### 4. Development Modes
 
 #### Local Polling Mode (Recommended for development)
+
 ```bash
 # Start the bot in polling mode
 pnpm bot:dev
 ```
 
 #### Local Webhook Mode (Advanced)
+
 ```bash
 # Terminal 1: Start Next.js dev server
 pnpm dev
@@ -90,6 +93,7 @@ PUBLIC_URL=https://your-ngrok-url.ngrok.io pnpm bot:set-webhook
 ### 5. Production Deployment
 
 #### Deploy to Vercel
+
 ```bash
 # Deploy to Vercel
 vercel --prod
@@ -134,6 +138,7 @@ pnpm prisma:deploy
 ```
 
 Notes:
+
 - The Prisma schema defines `jobs` to match this project.
 - This repo includes an initial migration; use `pnpm prisma:deploy` to apply it in CI/prod.
 - Ensure `DATABASE_URL` uses the pooled (non-readonly) connection string and set `DIRECT_URL` for migrations.
@@ -156,7 +161,6 @@ The schema is configured to use a pooled URL for runtime and a direct URL for mi
   - Set `DATABASE_URL` to your Pooler URL in `prisma/.env`.
   - Run: `pnpm prisma:deploy:pooler` (this overrides `DIRECT_URL` with the Pooler for the deploy run).
   - After success, revert to the direct URL for future migrations.
-
 
 ## 🏗️ Project Structure
 
@@ -185,6 +189,10 @@ prisma/
 
 ## 🧩 Architecture
 
+![System Architecture Diagram](public/diagram.png)
+
+The OmniMap Agent follows a modular architecture where various input sources (Instagram, Telegram, TikTok, WhatsApp) feed into a Next.js webhook endpoint, which then processes content through a Python server with OmniMap Agent Logic before storing results in Supabase.
+
 - Plugin-based extraction with a small core:
   - `core/types.ts`: Common types for inputs, results, and plugins
   - `core/registry.ts`: Runtime plugin registry (register/get)
@@ -196,7 +204,11 @@ prisma/
 
 ```ts
 // src/plugins/my-source.ts
-import type { ExtractorPlugin, InputRequest, ExtractionResult } from '@/core/types';
+import type {
+  ExtractorPlugin,
+  InputRequest,
+  ExtractionResult,
+} from '@/core/types';
 
 const plugin: ExtractorPlugin = {
   name: 'my-source',
@@ -219,20 +231,20 @@ export default plugin;
 
 ## 🔧 Scripts
 
-| Script | Description |
-|--------|-------------|
-| `pnpm dev` | Start Next.js development server |
-| `pnpm build` | Build for production |
-| `pnpm start` | Start production server |
-| `pnpm lint` | Run ESLint |
-| `pnpm lint:fix` | Run ESLint with auto-fix |
-| `pnpm type-check` | TypeScript checks without emitting |
-| `pnpm bot:dev` | Start bot in polling mode (development) |
-| `pnpm bot:set-webhook` | Register webhook with Telegram |
-| `pnpm worker:dev` | Start background worker |
-| `pnpm prisma:generate` | Generate Prisma client |
-| `pnpm prisma:migrate` | Create/apply a migration from schema |
-| `pnpm prisma:deploy` | Apply pending migrations (CI/prod) |
+| Script                      | Description                                |
+| --------------------------- | ------------------------------------------ |
+| `pnpm dev`                  | Start Next.js development server           |
+| `pnpm build`                | Build for production                       |
+| `pnpm start`                | Start production server                    |
+| `pnpm lint`                 | Run ESLint                                 |
+| `pnpm lint:fix`             | Run ESLint with auto-fix                   |
+| `pnpm type-check`           | TypeScript checks without emitting         |
+| `pnpm bot:dev`              | Start bot in polling mode (development)    |
+| `pnpm bot:set-webhook`      | Register webhook with Telegram             |
+| `pnpm worker:dev`           | Start background worker                    |
+| `pnpm prisma:generate`      | Generate Prisma client                     |
+| `pnpm prisma:migrate`       | Create/apply a migration from schema       |
+| `pnpm prisma:deploy`        | Apply pending migrations (CI/prod)         |
 | `pnpm prisma:deploy:pooler` | Migrate via pooled DATABASE_URL (fallback) |
 
 ## 🔐 Security Notes
@@ -246,17 +258,20 @@ export default plugin;
 ## 🏃‍♂️ Development Workflow
 
 ### Local Development
+
 1. Use `pnpm bot:dev` for quick testing with polling
 2. Bot responds immediately without webhook setup
 3. Perfect for testing commands and logic
 
 ### Testing Webhooks Locally
+
 1. Run `pnpm dev` to start Next.js
 2. Use ngrok or similar to expose localhost
 3. Set `PUBLIC_URL` and run `pnpm bot:set-webhook`
 4. Test webhook flow locally
 
 ### Production Deployment
+
 1. Deploy to Vercel with environment variables
 2. Run `pnpm bot:set-webhook` with production URL
 3. Bot receives updates via webhooks
@@ -265,21 +280,25 @@ export default plugin;
 ## 🧭 Roadmap
 
 Phase 1 — Extraction
+
 - [x] Instagram Reels/Post → candidate places with Google Maps links
 - [ ] Accept other inputs (plain text, websites) to extract places
 - [ ] Export results as JSON/CSV for downstream use
 
 Phase 2 — Enrichment
+
 - [ ] Enrich places via Google Places/OpenStreetMap details
 - [ ] De-duplicate/merge candidates; confidence scoring
 - [ ] Region hints and language handling
 
 Phase 3 — Update Suggestions
+
 - [ ] Generate suggested map updates (e.g., OSM edits) for review
 - [ ] Human-in-the-loop review flows inside Telegram
 - [ ] Track applied/approved suggestions
 
 Phase 4 — Usage & Billing (optional)
+
 - [ ] Usage logging and quotas
 - [ ] Team sharing / collaboration
 - [ ] Billing integration if needed
@@ -287,6 +306,7 @@ Phase 4 — Usage & Billing (optional)
 ## 🔧 Customization
 
 ### Adding New Commands
+
 Edit `src/bot/bot.ts` and add new command handlers:
 
 ```typescript
@@ -296,34 +316,41 @@ bot.command('newcommand', async (ctx) => {
 ```
 
 ### Adding Background Jobs
+
 1. Add processor to `src/worker/index.ts`
 2. Create jobs using `createJob()` from Supabase lib
 3. Worker automatically processes queued jobs
 
 ### Database Extensions
+
 Extend the Supabase schema as needed for your use case.
 
 ## 🧪 Usage Tips
+
 - Click the “🎬 Reels → Maps” button in `/start` to see status (WIP)
 
 ## 🐛 Troubleshooting
 
 ### Bot not responding
+
 - Check `BOT_TOKEN` is correct
 - Verify network connectivity
 - Check Telegram API status
 
 ### Webhook issues
+
 - Ensure `WEBHOOK_SECRET` matches
 - Verify `PUBLIC_URL` is accessible
 - Check Vercel function logs
 
 ### Database errors
+
 - Verify Supabase credentials
 - Check table permissions
 - Ensure tables exist
 
 ### Feature placeholders
+
 - Reels → Maps: currently returns a placeholder. No action required.
 
 ## 📝 License

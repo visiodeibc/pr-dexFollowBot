@@ -5,6 +5,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
+import httpx
 from supabase import create_client, Client
 
 from settings import Settings
@@ -19,6 +20,7 @@ class PythonHelloWorker:
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
+        logger.info("httpx version %s", httpx.__version__)
         self._client: Client = create_client(settings.supabase_url, settings.supabase_key)
 
     def run_forever(self) -> None:

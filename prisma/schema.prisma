@@ -19,31 +19,74 @@ enum JobStatus {
   failed
 }
 
+enum Platform {
+  telegram
+  instagram
+  whatsapp
+  tiktok
+  web
+}
+
 // Tables
 model Waitlist {
-  user_id           BigInt   @id @map("user_id")
-  username          String?  @db.Text
-  first_name        String?  @db.Text @map("first_name")
-  last_name         String?  @db.Text @map("last_name")
-  email             String?  @db.Text
-  pref_solana_wallet String? @db.Text @map("pref_solana_wallet")
-  joined_at         DateTime @default(now()) @map("joined_at")
-  source            String?  @db.Text
+  user_id            BigInt   @id @map("user_id")
+  username           String?  @db.Text
+  first_name         String?  @db.Text @map("first_name")
+  last_name          String?  @db.Text @map("last_name")
+  email              String?  @db.Text
+  pref_solana_wallet String?  @db.Text @map("pref_solana_wallet")
+  joined_at          DateTime @default(now()) @map("joined_at")
+  source             String?  @db.Text
 
   @@map("waitlist")
 }
 
+model Session {
+  id               String    @id @db.Uuid @default(dbgenerated("gen_random_uuid()"))
+  platform         Platform
+  platformUserId   String    @db.Text @map("platform_user_id")
+  platformChatId   BigInt?   @map("platform_chat_id")
+  metadata         Json?     @db.JsonB
+  lastMessageAt    DateTime  @default(now()) @map("last_message_at")
+  created_at       DateTime  @default(now()) @map("created_at")
+  updated_at       DateTime  @default(now()) @map("updated_at")
+  memories         SessionMemory[]
+  jobs             Job[]
+
+  @@unique([platform, platformUserId], name: "sessions_platform_user_id_key")
+  @@map("sessions")
+}
+
+model SessionMemory {
+  id         String   @id @db.Uuid @default(dbgenerated("gen_random_uuid()"))
+  session    Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId  String   @db.Uuid @map("session_id")
+  role       String   @db.Text
+  kind       String   @db.Text
+  content    Json?    @db.JsonB
+  created_at DateTime @default(now()) @map("created_at")
+
+  @@index([sessionId, created_at], name: "idx_session_memories_session_created")
+  @@map("session_memories")
+}
+
 model Job {
-  id         String    @id @db.Uuid @default(dbgenerated("gen_random_uuid()"))
-  type       String    @db.Text
-  chat_id    BigInt    @map("chat_id")
-  payload    Json      @db.JsonB
-  status     JobStatus @default(queued)
-  result     Json?     @db.JsonB
-  error      String?   @db.Text
-  created_at DateTime  @default(now()) @map("created_at")
-  updated_at DateTime  @default(now()) @map("updated_at")
+  id          String     @id @db.Uuid @default(dbgenerated("gen_random_uuid()"))
+  type        String     @db.Text
+  chat_id     BigInt     @map("chat_id")
+  payload     Json       @db.JsonB
+  status      JobStatus  @default(queued)
+  result      Json?      @db.JsonB
+  error       String?    @db.Text
+  session     Session?   @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  sessionId   String?    @db.Uuid @map("session_id")
+  parentJob   Job?       @relation("JobChildren", fields: [parentJobId], references: [id], onDelete: SetNull)
+  parentJobId String?    @db.Uuid @map("parent_job_id")
+  created_at  DateTime   @default(now()) @map("created_at")
+  updated_at  DateTime   @default(now()) @map("updated_at")
+  children    Job[]      @relation("JobChildren")
 
   @@index([status, created_at], name: "idx_jobs_status_created")
+  @@index([sessionId, created_at], name: "idx_jobs_session_created")
   @@map("jobs")
 }

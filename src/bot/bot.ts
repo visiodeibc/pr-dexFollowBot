@@ -1,5 +1,10 @@
 import { Bot, GrammyError, HttpError, InlineKeyboard } from 'grammy';
 import { env } from '@/lib/env';
+import {
+  appendSessionMemory,
+  createJob,
+  ensureSession,
+} from '@/lib/supabase';
 
 // Lazy bot instance creation
 let _bot: Bot | null = null;
@@ -81,11 +86,73 @@ bot.command('help', async (ctx) => {
     `📚 Available commands:
 
 /start - Get started with the bot
-/help - Show this help message`
+/help - Show this help message
+/hello - Trigger the Python worker hello-world demo`
   );
 });
 
 // No /reels command while feature is WIP
+
+// Prototype hello world handler to exercise Python worker pipeline
+bot.command('hello', async (ctx) => {
+  try {
+    const user = ctx.from;
+    const chat = ctx.chat;
+    if (!user || !chat) {
+      await ctx.reply('⚠️ Unable to determine your Telegram account.');
+      return;
+    }
+
+    const session = await ensureSession({
+      platform: 'telegram',
+      platformUserId: String(user.id),
+      platformChatId: chat.id,
+      metadata: {
+        username: user.username,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        languageCode: user.language_code,
+      },
+    });
+
+    if (!session) {
+      await ctx.reply('❌ Could not create a session. Please try again later.');
+      return;
+    }
+
+    await appendSessionMemory({
+      sessionId: session.id,
+      role: 'user',
+      kind: 'message',
+      content: {
+        text: ctx.message?.text ?? '',
+        telegramUserId: user.id,
+        username: user.username,
+      },
+    });
+
+    const job = await createJob({
+      type: 'python_hello',
+      chatId: chat.id,
+      payload: {
+        sessionId: session.id,
+        telegramUserId: user.id,
+        username: user.username,
+      },
+      sessionId: session.id,
+    });
+
+    if (!job) {
+      await ctx.reply('❌ Failed to queue the Python agent. Try again later.');
+      return;
+    }
+
+    await ctx.reply('🤖 Hello request sent to Python worker. I will update you once it responds.');
+  } catch (error) {
+    console.error('Error issuing hello command:', error);
+    await ctx.reply('❌ Something went wrong talking to the Python worker.');
+  }
+});
 
 // Handle callback queries (inline keyboard buttons)
 bot.on('callback_query:data', async (ctx) => {

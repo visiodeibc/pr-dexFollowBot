@@ -4,7 +4,11 @@ import dotenv from 'dotenv';
 dotenv.config({ path: '.env.local' });
 dotenv.config();
 import { bot } from '../bot/bot';
-import { getSupabaseAdmin, updateJobStatus, type JobRecord } from '../lib/supabase';
+import {
+  getSupabaseAdmin,
+  updateJobStatus,
+  type JobRecord,
+} from '../lib/supabase';
 import { routeAndExtract } from '../core/orchestrator';
 import type { InputRequest } from '../core/types';
 
@@ -53,7 +57,22 @@ const jobProcessors: JobProcessor = {
     await bot().api.sendMessage(job.chat_id, text);
     await updateJobStatus(job.id, 'completed', { result });
   },
+  notify_user: async (job: JobRecord) => {
+    const message: string | undefined = job.payload?.message;
+    if (!message) {
+      throw new Error('notify_user job missing payload.message');
+    }
+    const kwargs: Record<string, unknown> = {};
+    const parseMode = job.payload?.parse_mode;
+    if (parseMode) kwargs.parse_mode = parseMode;
+    await bot().api.sendMessage(job.chat_id, message, kwargs);
+    await updateJobStatus(job.id, 'completed', {
+      delivered_at: new Date().toISOString(),
+    });
+  },
 };
+
+const HANDLED_JOB_TYPES = Object.keys(jobProcessors);
 
 async function processJob(job: JobRecord): Promise<void> {
   const processor = jobProcessors[job.type];
@@ -94,6 +113,7 @@ async function pollJobs(): Promise<void> {
       .from('jobs')
       .select('*')
       .eq('status', 'queued')
+      .in('type', HANDLED_JOB_TYPES)
       .order('created_at', { ascending: true })
       .limit(10);
 

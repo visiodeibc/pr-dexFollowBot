@@ -114,6 +114,20 @@ pnpm worker:dev
 
 In production, you can run the worker as a separate service or scheduled function.
 
+### 6.1 Python Agent (Prototype)
+
+The Python FastAPI worker that processes `python_hello` jobs lives in `python/agent`.
+
+```bash
+cd python/agent
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --reload
+```
+
+Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE` (or `SUPABASE_ANON_KEY` for dev). On startup it begins polling Supabase for `python_hello` jobs, appends an assistant memory, and pushes a `notify_user` job that the Node worker delivers to Telegram. Deploy to Cloud Run with the included Dockerfile when you are ready to test end-to-end.
+
 ### 6.5. Reels → Maps (WIP)
 
 - Telegram UI: The “🎬 Reels → Maps” button exists and replies with a placeholder.

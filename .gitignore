@@ -47,6 +47,10 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+.venv/
+
+# Python
+__pycache__/
 
 # Vercel
 .vercel

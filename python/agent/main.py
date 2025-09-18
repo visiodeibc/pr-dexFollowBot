@@ -6,8 +6,8 @@ from typing import Optional
 
 from fastapi import FastAPI
 
-from .settings import get_settings
-from .worker import PythonHelloWorker
+from settings import get_settings
+from worker import PythonHelloWorker
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

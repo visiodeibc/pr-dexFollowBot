@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from .settings import get_settings
-from .worker import PythonHelloWorker
+from settings import get_settings
+from worker import PythonHelloWorker
 
 
 def main() -> None:

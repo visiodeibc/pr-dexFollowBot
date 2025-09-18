@@ -7,7 +7,7 @@ from typing import Any, Dict, Optional
 
 from supabase import create_client, Client
 
-from .settings import Settings
+from settings import Settings
 
 logger = logging.getLogger(__name__)
 

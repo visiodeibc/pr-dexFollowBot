@@ -5,10 +5,9 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-import httpx
+from supabase import Client, create_client
 
 from settings import Settings
-from supabase_client import SupabaseRestClient
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +19,8 @@ class PythonHelloWorker:
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
-        logger.info("httpx version %s", httpx.__version__)
-        self._client = SupabaseRestClient(settings.supabase_url, settings.supabase_key)
+        logger.info("Initializing Supabase client")
+        self._client: Client = create_client(settings.supabase_url, settings.supabase_key)
 
     def run_forever(self) -> None:
         logger.info("Starting Python hello worker loop")
@@ -37,22 +36,32 @@ class PythonHelloWorker:
                 time.sleep(self._settings.poll_interval)
 
     def _claim_next_job(self) -> Optional[Dict[str, Any]]:
-        try:
-            job = self._client.fetch_next_job(self.HANDLED_TYPES)
-        except httpx.HTTPError as exc:
-            logger.error("Failed to fetch next job: %s", exc)
+        response = (
+            self._client.table("jobs")
+            .select("*")
+            .eq("status", "queued")
+            .in_("type", self.HANDLED_TYPES)
+            .order("created_at", desc=False)
+            .limit(1)
+            .execute()
+        )
+        jobs = getattr(response, "data", None) or []
+        if not jobs:
             return None
-        if not job:
+        job = jobs[0]
+        now_iso = datetime.now(timezone.utc).isoformat()
+        update = (
+            self._client.table("jobs")
+            .update({"status": "processing", "updated_at": now_iso})
+            .eq("id", job["id"])
+            .eq("status", "queued")
+            .execute()
+        )
+        updated = getattr(update, "data", None) or []
+        if not updated:
             return None
-        try:
-            claimed = self._client.claim_job(job["id"])
-        except httpx.HTTPError as exc:
-            logger.error("Failed to claim job %s: %s", job["id"], exc)
-            return None
-        if not claimed:
-            return None
-        logger.info("Claimed job %s (%s)", claimed["id"], claimed["type"])
-        return claimed
+        logger.info("Claimed job %s (%s)", job["id"], job["type"])
+        return updated[0]
 
     def _process_job(self, job: Dict[str, Any]) -> None:
         session_id = job.get("session_id")
@@ -67,15 +76,16 @@ class PythonHelloWorker:
         if session_id:
             self._append_session_memory(session_id, greeting)
 
-        self._client.update_job(
-            job_id,
+        now_iso = datetime.now(timezone.utc).isoformat()
+        self._client.table("jobs").update(
             {
                 "status": "completed",
                 "result": {"message": greeting},
-            },
-        )
+                "updated_at": now_iso,
+            }
+        ).eq("id", job_id).execute()
 
-        self._client.insert_job(
+        self._client.table("jobs").insert(
             {
                 "type": "notify_user",
                 "chat_id": chat_id,
@@ -84,19 +94,19 @@ class PythonHelloWorker:
                 "session_id": session_id,
                 "parent_job_id": job_id,
             }
-        )
+        ).execute()
 
         logger.info("python_hello job %s completed", job_id)
 
     def _append_session_memory(self, session_id: str, message: str) -> None:
         try:
-            self._client.insert_session_memory(
+            self._client.table("session_memories").insert(
                 {
                     "session_id": session_id,
                     "role": "assistant",
                     "kind": "message",
                     "content": {"text": message, "source": "python_hello"},
                 }
-            )
-        except httpx.HTTPError as exc:
+            ).execute()
+        except Exception as exc:  # noqa: BLE001
             logger.warning("Failed to append session memory: %s", exc)

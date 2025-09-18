@@ -126,7 +126,7 @@ pip install -r requirements.txt
 uvicorn main:app --reload
 ```
 
-Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE` (or `SUPABASE_ANON_KEY` for dev). On startup it begins polling Supabase’s REST API for `python_hello` jobs, appends an assistant memory, and pushes a `notify_user` job that the Node worker delivers to Telegram. Deploy to Cloud Run with the included Dockerfile when you are ready to test end-to-end.
+Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE` (or `SUPABASE_ANON_KEY` for dev). On startup it begins polling Supabase for `python_hello` jobs, appends an assistant memory, and pushes a `notify_user` job that the Node worker delivers to Telegram. Deploy to Cloud Run with the included Dockerfile when you are ready to test end-to-end.
 
 ### 6.5. Reels → Maps (WIP)
 

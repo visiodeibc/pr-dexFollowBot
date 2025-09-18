@@ -1,6 +1,6 @@
 # OmniMap Python Agent
 
-Prototype FastAPI service + polling worker that processes `python_hello` jobs from Supabase and replies to Telegram users through the Node worker. The worker talks to Supabase via the REST interface using the service-role key.
+Prototype FastAPI service + polling worker that processes `python_hello` jobs from Supabase and replies to Telegram users through the Node worker.
 
 ## Quickstart
 
@@ -34,4 +34,4 @@ The FastAPI service exposes:
 - `GET /healthz` – health probe for Cloud Run
 - `GET /hello` – manual hello-world response
 
-On startup the background thread polls Supabase REST (`/rest/v1`) for `python_hello` jobs and posts a `notify_user` job after crafting a greeting.
+On startup the background thread polls Supabase for `python_hello` jobs and posts a `notify_user` job after crafting a greeting.

@@ -35,3 +35,4 @@ The FastAPI service exposes:
 - `GET /hello` – manual hello-world response
 
 On startup the background thread polls Supabase REST (`/rest/v1`) for `python_hello` jobs and posts a `notify_user` job after crafting a greeting.
+ci test

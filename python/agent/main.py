@@ -31,7 +31,7 @@ def launch_worker() -> None:
     logger.info("Python worker thread started")
 
 
-@app.get("/healthz")
+@app.get("/health")
 def healthcheck() -> dict[str, str]:
     return {"status": "ok"}
 
